@@ -40,7 +40,8 @@ c_std = [1.16,1.13,1.07];
 entropy_values = struct('patch_mean',p_mean,'patch_stdev',p_std,...
                         'clean_mean',c_mean,'clean_stdev',c_std);
 
-for im = 3 :size(adv_images_dir,1)
+for im = 3:3
+    %:size(adv_images_dir,1)
     
     fprintf("Image %d / %d \n ",im-2,size(adv_images_dir,1)-2)
     image_path = strcat(adv_images_path,adv_images_dir(im).name);
@@ -63,24 +64,36 @@ for im = 3 :size(adv_images_dir,1)
     strd = ws/2;
     
     area = size_x * size_y;
-    [ents,e_htmp_100] = get_entr_heatmap(img,size_x,size_y,ws(1),strd(1),entropy_values,1);
-    [ents,e_htmp_150] = get_entr_heatmap(img,size_x,size_y,ws(2),strd(2),entropy_values,2);
-    [ents,e_htmp_200] = get_entr_heatmap(img,size_x,size_y,ws(3),strd(3),entropy_values,3);
+    [ents,ori,e_htmp_100] = test_entr_heatmap(img,size_x,size_y,ws(1),strd(1),entropy_values,1);
+    % [ents,e_htmp_100] = get_entr_heatmap(img,size_x,size_y,ws(1),strd(1),entropy_values,1);
+    % [ents,e_htmp_150] = get_entr_heatmap(img,size_x,size_y,ws(2),strd(2),entropy_values,2);
+    % [ents,e_htmp_200] = get_entr_heatmap(img,size_x,size_y,ws(3),strd(3),entropy_values,3);
     
-    e_htmp = e_htmp_100 + e_htmp_150 + e_htmp_200;
-    
-    
+    % e_htmp = e_htmp_100 + e_htmp_150 + e_htmp_200;
+
+    %plot heatmap
+    % t = tiledlayout(2, 2);
+    % ax = nexttile(1);
+    % imshow(e_htmp);
+    % ax = nexttile(2);
+    % imshow(e_htmp_100);
+    % ax = nexttile(3);
+    % imshow(e_htmp_150);
+    % ax = nexttile(4);
+    % imshow(e_htmp_200);
+    % pause(2)
+
     %cleanup
-    mask = e_htmp > 0;
-    mask = mask(1:size_x,1:size_y);
-    stats = regionprops(mask,'Area','BoundingBox','PixelIdxList');
+    % mask = e_htmp > 0;
+    % mask = mask(1:size_x,1:size_y);
+    % stats = regionprops(mask,'Area','BoundingBox','PixelIdxList');
     
     
-    for blob = 1:size(stats,1)
-        if (stats(blob).Area / area < 0.005 && (size(stats,1)>1 || max([stats.Area]) > 0.01))
-            mask(stats(blob).PixelIdxList) = 0;
-        end
-    end
+    % for blob = 1:size(stats,1)
+    %     if (stats(blob).Area / area < 0.005 && (size(stats,1)>1 || max([stats.Area]) > 0.01))
+    %         mask(stats(blob).PixelIdxList) = 0;
+    %     end
+    % end
     
     if use_autoencoder == 1
         autoenc_mask =  predict(autoenc,mask);
@@ -113,9 +126,9 @@ for im = 3 :size(adv_images_dir,1)
     end
     
     %inpainting + save
-    new_img = mitigate_patch(img,mask);
-    save_path = strcat(cleaned_images_path,adv_images_dir(im).name);
-    imwrite(new_img,save_path);
+    % new_img = mitigate_patch(img,mask);
+    % save_path = strcat(cleaned_images_path,adv_images_dir(im).name);
+    % imwrite(new_img,save_path);
     
 end
 
@@ -183,3 +196,67 @@ for ind = 1 : size(r)
 end
 new_img = inpaintCoherent(img,mask);
 end
+
+function show_img(img)
+imshow(img);
+pause(2);
+end
+
+%% test heatmap function
+function [ents,ori,e_htmp] = test_entr_heatmap(img,size_x,size_y,winsize,strd,entropy_values,i)
+
+    img_gr = rgb2gray(img);
+    entr_heatmap = zeros(size(img_gr));
+    ori = img_gr;
+    win_size_x = winsize;
+    win_size_y = winsize;
+    
+    img_gr = padarray(img_gr,[win_size_x/2,win_size_y/2],'symmetric');
+    fprintf("ImageSize %d X %d\n ",size(img_gr))
+    
+    stride_x = strd;
+    stride_y = strd;
+    
+    ents = [];
+    for x = 1 : stride_x : size(img_gr,1) - win_size_x
+        for y = 1 : stride_y : size(img_gr,2) - win_size_y
+            ori = img_gr(x:x+win_size_x,y:y+win_size_y);
+            window_cur = img_gr(x:x+win_size_x,y:y+win_size_y);
+            win_entr = entropy(window_cur);
+            entr_heatmap(x:x+win_size_x,y:y+win_size_y) = win_entr;
+            ents = [ents,win_entr];
+        end
+    end
+    e_htmp = entr_heatmap;
+    % x_exc = size(entr_heatmap,1) - size_x;
+    % y_exc = size(entr_heatmap,2) - size_y;
+    % entr_heatmap = entr_heatmap(round(x_exc / 2):size_x+round(x_exc / 2)-1,round(y_exc / 2):size_y+round(y_exc / 2)-1);
+    % emax =max(max(entr_heatmap));
+    % emin=min(min(entr_heatmap));
+    % ediff = emax - emin;
+    
+    
+    % patch_mean = entropy_values.patch_mean(i);
+    % patch_std = entropy_values.patch_stdev(i);
+    
+    % clean_mean = entropy_values.clean_mean(i);
+    % clean_stdev = entropy_values.clean_stdev(i);
+    
+    % img_mean = mean(ents);
+    % img_spread = (img_mean - clean_mean) / clean_stdev;
+    
+    % dev_mult = ((patch_mean - clean_mean) / patch_mean) * 2;
+    
+    % thr_base = (patch_mean + 1.5 * patch_std) - (dev_mult * patch_std);
+    % entr_thr = thr_base + (img_spread * patch_std);
+    
+    % e_htmp = entr_heatmap - entr_thr;
+    
+    %debug: show selected entropy threshold
+    %fprintf('ws = %d , thr = %f \n',win_size_x,entr_thr)
+    
+    % e_htmp = max(e_htmp,0);
+    
+    % e_htmp = e_htmp ~= 0;
+    
+    end
