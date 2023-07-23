@@ -9,7 +9,7 @@ from skimage.measure import shannon_entropy
 import random
 import matplotlib.pyplot as plt
 
-adv_mode = True
+adv_mode = False
 random.seed(47)
 adv_img_path = 'adversarial_samples/'
 clean_img_path = '/root/data/VOCdevkit/VOC2012/JPEGImages'
@@ -20,7 +20,7 @@ def load_imgs(path):
     
     assert os.path.exists(path), f"{path}: img folder not found!!!"
     
-    imgs_name = [os.path.join(path, name) for name in sorted(os.listdir(path))]
+    imgs_name = [os.path.join(path, name) for name in sorted(os.listdir(path))[:10]]
     imgs = []
     for img_name in imgs_name:
         imgs.append(np.asarray(Image.open(img_name).convert("L")))
