@@ -58,11 +58,14 @@ def load_imgs(path, smooth=False, rand=False, n=1000):
     print(f"finish loading images, total {end - start:.2f}s")
     return imgs, imgs_name
 
-def get_heatmap(img, ws_ratio):
+def get_heatmap(img, ws_ratio=1, bin_mode=False, bin_size=2):
     (size_x, size_y) = img.shape
     size_max = max(size_x, size_y)
     size_max = max(ceil(size_max/100), 8)
-    w_size = int((size_max + (size_max & 1)) * ws_ratio)
+    size_max += (size_max & 1)
+    w_size = size_max * ws_ratio
+    assert w_size.is_integer() if type(w_size) is float else type(w_size) is int, "w_size is not integer!!!"
+    w_size = int(w_size)
     w_size += (w_size & 1)
     strd = w_size / 2
     assert strd.is_integer(), "strd is not integer!!!"
@@ -71,23 +74,18 @@ def get_heatmap(img, ws_ratio):
     heatmap = np.zeros((size_x + w_size, size_y + w_size))
     pad_img = np.pad(img, (int(w_size/2),), "symmetric")
 
-    # start = time.time()
-    # a = np.unique(pad_img[0:w_size, 0:w_size].flatten(), return_counts=True)[1]
-    # a = np.histogram(pad_img[0:w_size, 0:w_size].flatten(), range(256))[0]
-
-    # a = entropy(a/sum(a))
-
-    # end = time.time()
-    # print(f"time: {end - start:.5f} {a}")
-
     ents = []
     bound = []
     for x in range(0, pad_img.shape[0] - w_size, strd):
         for y in range(0, pad_img.shape[1] - w_size, strd):
-            # counts = np.unique(pad_img[x:x+w_size, y:y+w_size].flatten(), return_counts=True)[1]
-            # print(f"sum: {sum(counts)}")
-            # ent = entropy(counts, base = 2)
-            ent = shannon_entropy(pad_img[x:x+w_size, y:y+w_size])
+            if bin_mode:
+                pi = pad_img[x:x+w_size, y:y+w_size].flatten()
+                pi = pi // bin_size
+                counts = np.unique(pi, return_counts=True)[1]
+                ent = entropy(counts, base = 2)
+            else:
+                ent = shannon_entropy(pad_img[x:x+w_size, y:y+w_size])
+            # assert ent==slow_ent, "not equal!!"
             ents.append(ent)
             heatmap[x:x+w_size, y:y+w_size] = ent
             bound = [x+w_size, y+w_size]
