@@ -19,16 +19,44 @@ att_img_path = 'attacked_samples/'
 # clean_img_path = '/root/data/VOCdevkit/VOC2012/JPEGImages'
 clean_img_path = 'exp/clean.txt'
 
-def load_imgs(path):
+def arg_parse():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c','--clean',action='store_true')
+    parser.add_argument('-w','--window_ratio',action='store_true')
+    parser.add_argument('-sm','--smooth',action='store_true')
+    parser.add_argument('-b','--bin',action='store_true')
+    parser.add_argument('-bz','--bin_size',type=int,default=2)
+    return parser.parse_args()
+
+def unpickle(file):
+    import pickle
+    with open(file, 'rb') as fo:
+        dict = pickle.load(fo, encoding='bytes')
+    return dict
+
+def load_imgs(path, smooth=False, rand=False, n=1000):
     
+    # if(path.split()):
+    #     pass
+
     assert os.path.exists(path), f"{path}: img folder not found!!!"
     
-    imgs_name = [os.path.join(path, name) for name in sorted(os.listdir(path))[:10]]
+    namelist = sorted(os.listdir(path))
+    imgs_name = [os.path.join(path, name) for name in namelist]
+    if rand:
+        imgs_name = random.sample(imgs_name, k=n)
+
+    start = time.time()
+    print(f"start loading {len(imgs_name)} images")
     imgs = []
     for img_name in imgs_name:
-        imgs.append(np.asarray(Image.open(img_name).convert("L")))
-    
-    return imgs
+        img = np.asarray(Image.open(img_name))
+        if smooth:
+            img = gaussian_filter(img, sigma = 1)
+        imgs.append(img)
+    end = time.time()
+    print(f"finish loading images, total {end - start:.2f}s")
+    return imgs, imgs_name
 
 def get_heatmap(img, ws_ratio):
     (size_x, size_y) = img.shape
