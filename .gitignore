@@ -1,3 +1,6 @@
 *.md
 adversarial_samples/
 cleaned_samples/
+attacked_samples/
+noise_samples/
+exp/
