@@ -101,39 +101,206 @@ def get_heatmap(img, ws_ratio=1, bin_mode=False, bin_size=2):
 
     return heatmap, ents
 
+def add_noise(imgs, mean=0, sigma=0.1):
 
-if __name__ == '__main__':
-    imgs = load_imgs(img_path)
-    # print(f"ent: {entropy([0.5])}")
+    gaussian_outs = []
+    for img in imgs:
+        # int -> float (標準化)
+        img = img / 255
+        # 隨機生成高斯 noise (float + float)
+        noise = np.random.normal(mean, sigma, img.shape)
+        # noise + 原圖
+        gaussian_out = img + noise
+        # 所有值必須介於 0~1 之間，超過1 = 1，小於0 = 0
+        gaussian_out = np.clip(gaussian_out, 0, 1)
+
+        # 原圖: float -> int (0~1 -> 0~255)
+        gaussian_out = np.uint8(gaussian_out*255)
+
+        gaussian_outs.append(gaussian_out)
+
+    return gaussian_outs
+
+def ent_test():
+    args = arg_parse()
+
+    adv_mode = not args.clean
+    w_mode = args.window_ratio
+    smooth = args.smooth
+    bin_mode = args.bin
+    bin_size = args.bin_size
+    mode = "adv" if adv_mode else "clean"
+    b_txt = f"|bin_size: {bin_size}" if bin_mode else ""
+    print(f"mode: {mode}|ratio_mode: {w_mode}|smooth: {str(smooth)}|bin: {str(bin_mode)}{b_txt}")
+
+    img_path = adv_img_path if adv_mode else clean_img_path
+
+    imgs, img_name = load_imgs(img_path, smooth)
 
     # test = np.random.randint(0, 256, (217, 212))
-    heatmaps = []
-    ents_arr = []
-    for r in range(1,2):
-        mode = "adv" if adv_mode else "clean"
-        print(f"mode: {mode}|ratio: {r}")
-        for img in imgs:
-            h, e = get_heatmap(img, ws_ratio)
-            heatmaps.append(h)
-            ents_arr.append(e)
-
-    mean_ent = []
+    hm_100 = []
+    hm_150 = []
+    hm_200 = []
+    ent_100 = []
+    ent_150 = []
+    ent_200 = []
+    heatmaps = [hm_100, hm_150, hm_200]
+    ents_arr = [ent_100, ent_150, ent_200]
+    ws_ratio = [1, 1.5, 2] if w_mode else [1]
+    for id, r in enumerate(ws_ratio):
+        print(f"Start heatmap r: {r} calculate:")
+        for i, img in tqdm(enumerate(imgs), total=len(imgs)):
+            h, e = get_heatmap(img, r, bin_mode, bin_size)
+            heatmaps[id].append(h)
+            ents_arr[id].append(e)
+    m100 = []
+    m150 = []
+    m200 = []
+    mean_ent = [m100, m150, m200]
     save_hmap_path = "exp/hmap/"
     save_hstg_path = "exp/hstg/"
-    mode_folder = "adv/" if adv_mode else "clean/"
+    clean_txt_path = "exp/clean.txt"
+    mode_folder = "att/" if adv_mode else "clean/"
     save_hmap_path += mode_folder
     save_hstg_path += mode_folder
+    if bin_mode:
+        save_hmap_path += "bin/"
+        save_hstg_path += "bin/"
+        if not os.path.exists(save_hmap_path):
+            os.mkdir(save_hmap_path)
+        if not os.path.exists(save_hstg_path):
+            os.mkdir(save_hstg_path)
 
-    for i, heatmap in enumerate(heatmaps):
-        mean = np.mean(ents_arr[i])
-        # print(f"sum:{sum(ents_arr[i]):.4f}/num:{len(ents_arr[i])}")
-        map_mean = np.mean(heatmap)
-        print(f"{i:2}: mean_entropy {map_mean}/{mean}")
-        mean_ent.append(mean)
+    if w_mode:
+        hm_len = len(heatmaps[0])
+        for i in range(hm_len):
+            for wr in range(3):
+                heatmap = heatmaps[wr][i]
+                mean = np.mean(ents_arr[wr][i])
+                # print(f"sum:{sum(ents_arr[i]):.4f}/num:{len(ents_arr[i])}")
+                # map_mean = np.mean(heatmap)
+                # print(f"{i:2}: mean_entropy {map_mean}/{mean}")
+                mean_ent[wr].append((mean, img_name[i]))
+                if adv_mode:
+                    plt.figure(i)
+                    hstg = sns.histplot(heatmap.flatten(), kde=False, color='blue', element="poly")
+                    hstg.get_figure().savefig(save_hstg_path+f"{i}_wr{wr}.png")
+                    hmap = sns.heatmap(heatmap)
+                    hmap.get_figure().savefig(save_hmap_path+f"{i}_wr{wr}.png")
+                    plt.close()
+    else:
+        for i, heatmap in enumerate(heatmaps[0]):
+            mean = np.mean(ents_arr[0][i])
+            # print(f"sum:{sum(ents_arr[i]):.4f}/num:{len(ents_arr[i])}")
+            # map_mean = np.mean(heatmap)
+            # print(f"{i:2}: mean_entropy {map_mean}/{mean}")
+            mean_ent.append((mean, img_name[i]))
+            if adv_mode:
+                plt.figure(i)
+                hstg = sns.histplot(heatmap.flatten(), kde=False, color='blue', element="poly")
+                hstg.get_figure().savefig(save_hstg_path+f"{i}.png")
+                hmap = sns.heatmap(heatmap)
+                hmap.get_figure().savefig(save_hmap_path+f"{i}.png")
+                plt.close()
+    if not adv_mode:
+        mean_ent = sorted(mean_ent)
+        with open(clean_txt_path, 'w') as file:
+            file.write('min:\n')
+            for i in range(10):
+                file.write('name: '+mean_ent[i][1]+' ent: '+str(mean_ent[i][0])+'\n')
+            file.write('max:\n')
+            for i in range(10):
+                file.write('name: '+mean_ent[-10+i][1]+' ent: '+str(mean_ent[-10+i][0])+'\n')
+
+    for i in range(3):
+        ents = [a for a, _ in mean_ent[i]]
+        print(f"{i}: total mean: {sum(ents)/len(ents)}")
+
+def trans_to_img(arr):
+    rgb = np.reshape(arr, (3, 32, 32))
+    gray = np.dot(rgb[...,:3], [0.2989, 0.5870, 0.1140])
+    return gray
+
+def cifar_test():
+    cifar_100 = True
+    file = "../cifar-100-python/train" if cifar_100 else "../cifar-10-batches-py/test_batch"
+    meta_file = "../cifar-100-python/meta" if cifar_100 else "../cifar-10-batches-py/batches.meta"
+    d = unpickle(file)
+    print(f"d: {d.keys()}")
+    n = 100 if cifar_100 else 10
+    num = [0]*n
+    ent = [0]*n
+    meta = unpickle(meta_file)
+    print(f"meta: {meta.keys()}")
+    data_key = b'data'
+    label_key = b'fine_labels' if cifar_100 else b'labels'
+    meta_key = b'fine_label_names' if cifar_100 else b'label_names'
+    for i in range(10000):
+        img = trans_to_img(d[data_key][i])
+        label = d[label_key][i]
+        h, e = get_heatmap(img)
+        ent[label] += np.mean(e)
+        num[label] += 1
+    result = [x / y for x, y in zip(ent, num)]
+    result = sorted([(a, meta[meta_key][i].decode('utf-8')) for i, a in enumerate(result)])
+    print(result)
+
+def paste_patch():
+    patch_file = "adversarial_samples/e70v3.png"
+    clean_file = 'exp/clean.txt'
+    patch = Image.open(patch_file).resize((50, 50))
+    with open(clean_file, 'r') as f:
+        lines = f.readlines()
+    min_lines = lines[1:6]
+    max_lines = lines[-5:]
+    lines = max_lines + min_lines
+    for i,line in enumerate(lines):
+        path = line.split(" ")[1]
+        img = Image.open(path).resize((224, 224))
+        new_img = img.paste(patch, (50,50))
+        new_img.save(f'attacked_samples/{i}.png')
+
+def face_test():
+    face_path = "../img_align_celeba"
+    imgs, img_names = load_imgs(face_path, rand=True, n=20000)
+    total_mean = 0
+    for img in tqdm(imgs):
+        h,e = get_heatmap(img)
+        total_mean += np.mean(e)
+    total_mean /= 20000
+    print(f"mean: {total_mean}")
+
+def noise_test():
+    save_path = 'exp/hmap/noise/'
+    noise_path = 'noise_samples/'
+    if not os.path.exists(save_path):
+        os.mkdir(save_path)
+    if not os.path.exists(noise_path):
+        os.mkdir(noise_path)
+    imgs,_ = load_imgs(att_img_path)
+    new_imgs = add_noise(imgs, sigma=0.1)
+    r = 2
+    for i,img in tqdm(enumerate(new_imgs), total=len(new_imgs)):
+        Image.fromarray(img).convert('RGB').save(noise_path+f'{i}.png')
         plt.figure(i)
-        hstg = sns.histplot(heatmap.flatten(), kde=False, color='blue', element="poly")
-        hstg.get_figure().savefig(save_hstg_path+f"{i}.png")
-        hmap = sns.heatmap(heatmap)
-        hmap.get_figure().savefig(save_hmap_path+f"{i}.png")
+        h,e = get_heatmap(img, ws_ratio=r)
+        hmap = sns.heatmap(h)
+        hmap.get_figure().savefig(save_path+f"{i}.png")
+        plt.close()
 
-    print(f"total mean: {sum(mean_ent)/len(mean_ent)}")
+def noise_attach():
+    imgs,_=load_imgs(att_img_path)
+    new_imgs=add_noise(imgs,sigma=0.3)
+    noise_path = 'noise_samples/'
+    for i,img in tqdm(enumerate(new_imgs), total=len(new_imgs)):
+        Image.fromarray(img).convert('RGB').save(noise_path+f'RGB{i}.png')
+
+
+if __name__ == '__main__':
+
+    # ent_test()
+    # cifar_test()
+    # paste_patch()
+    # face_test()
+    # noise_test()
+    noise_attach()
