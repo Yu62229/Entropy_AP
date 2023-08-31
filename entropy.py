@@ -15,9 +15,9 @@ import argparse
 
 np.random.seed(47)
 adv_img_path = 'adversarial_samples/'
-clean_img_path = '/root/data/VOCdevkit/VOC2012/JPEGImages'
-img_path = adv_img_path if adv_mode else clean_img_path
-ws_ratio = 1
+att_img_path = 'attacked_samples/'
+# clean_img_path = '/root/data/VOCdevkit/VOC2012/JPEGImages'
+clean_img_path = 'exp/clean.txt'
 
 def load_imgs(path):
     
